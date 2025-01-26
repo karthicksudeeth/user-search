@@ -1,0 +1,19 @@
+body {
+  font-family: Arial, sans-serif;
+}
+
+.table th, .table td {
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .table th, .table td {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 576px) {
+  .mt-5 {
+    margin-top: 1rem !important;
+  }
+}
