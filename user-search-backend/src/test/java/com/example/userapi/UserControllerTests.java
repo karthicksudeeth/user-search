@@ -8,10 +8,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import java.io.IOException;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.test.context.SpringBootTest;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
@@ -38,26 +40,29 @@ public class UserControllerTests {
     }
 
     @Test
-    void testImportUsersSuccess() throws IOException{
-        doNothing().when(userService).saveUsersFromJson();
-        String response = userController.importUsers();
-        assertEquals("Users imported successfully!", response);
+    void testImportUsersSuccess() throws IOException {
+        when(userService.saveUsersFromJson()).thenReturn(Mono.empty());
+        Mono<String> response = userController.importUsers();
+        assertEquals("Users imported successfully!", response.block());
         verify(userService, times(1)).saveUsersFromJson();
     }
 
     @Test
     void testImportUsersFailure() throws IOException {
-        doThrow(new RuntimeException("Import failed")).when(userService).saveUsersFromJson();
-        String response = userController.importUsers();
-        assertTrue(response.contains("Failed to import users"));
+        when(userService.saveUsersFromJson()).thenReturn(Mono.error(new RuntimeException("Import failed")));
+        Mono<String> response = userController.importUsers();
+        String result = response.onErrorReturn("Failed to import users").block();
+        assertTrue(result.contains("Failed to import users"));
         verify(userService, times(1)).saveUsersFromJson();
     }
 
     @Test
     void testSearchUsers() {
         List<User> users = Arrays.asList(user);
-        when(userService.searchUsers("John")).thenReturn(users);
-        List<User> result = userController.searchUsers("John");
+        when(userService.searchUsers("John")).thenReturn(Flux.fromIterable(users));
+        Flux<User> resultFlux = userController.searchUsers("John");
+        List<User> result = resultFlux.collectList().block();
+        assertNotNull(result);
         assertEquals(1, result.size());
         assertEquals("John", result.get(0).getFirstName());
         verify(userService, times(1)).searchUsers("John");
@@ -65,8 +70,9 @@ public class UserControllerTests {
 
     @Test
     void testFindUserById() {
-        when(userService.findUserByIdOrEmail(1L, null)).thenReturn(user);
-        User result = userController.findUser(1L, null);
+        when(userService.findUserByIdOrEmail(1L, null)).thenReturn(Mono.just(user));
+        Mono<User> resultMono = userController.findUser(1L, null);
+        User result = resultMono.block();
         assertNotNull(result);
         assertEquals(1L, result.getId());
         verify(userService, times(1)).findUserByIdOrEmail(1L, null);
@@ -74,33 +80,37 @@ public class UserControllerTests {
 
     @Test
     void testFindUserByEmail() {
-        when(userService.findUserByIdOrEmail(null, "john.doe@example.com")).thenReturn(user);
-        User result = userController.findUser(null, "john.doe@example.com");
+        when(userService.findUserByIdOrEmail(null, "john.doe@example.com")).thenReturn(Mono.just(user));
+        Mono<User> resultMono = userController.findUser(null, "john.doe@example.com");
+        User result = resultMono.block();
         assertNotNull(result);
         assertEquals("john.doe@example.com", result.getEmail());
         verify(userService, times(1)).findUserByIdOrEmail(null, "john.doe@example.com");
     }
+
     @Test
     void testFindUserByIdNotFound() {
-        when(userService.findUserByIdOrEmail(999L, null)).thenReturn(null);
-        User result = userController.findUser(999L, null);
+        when(userService.findUserByIdOrEmail(999L, null)).thenReturn(Mono.empty());
+        Mono<User> resultMono = userController.findUser(999L, null);
+        User result = resultMono.block();
         assertNull(result);
         verify(userService, times(1)).findUserByIdOrEmail(999L, null);
     }
 
     @Test
     void testFindUserByEmailNotFound() {
-        when(userService.findUserByIdOrEmail(null, "nonexistent@example.com")).thenReturn(null);
-        User result = userController.findUser(null, "nonexistent@example.com");
+        when(userService.findUserByIdOrEmail(null, "nonexistent@example.com")).thenReturn(Mono.empty());
+        Mono<User> resultMono = userController.findUser(null, "nonexistent@example.com");
+        User result = resultMono.block();
         assertNull(result);
         verify(userService, times(1)).findUserByIdOrEmail(null, "nonexistent@example.com");
     }
 
     @Test
     void testSearchUsersNoResults() {
-        List<User> emptyList = Arrays.asList();
-        when(userService.searchUsers("NonExistentName")).thenReturn(emptyList);
-        List<User> result = userController.searchUsers("NonExistentName");
+        when(userService.searchUsers("NonExistentName")).thenReturn(Flux.empty());
+        Flux<User> resultFlux = userController.searchUsers("NonExistentName");
+        List<User> result = resultFlux.collectList().block();
         assertTrue(result.isEmpty());
         verify(userService, times(1)).searchUsers("NonExistentName");
     }
@@ -111,8 +121,9 @@ public class UserControllerTests {
                 "0987654321", "janedoe", "password", "1995-05-05", "image2.jpg",
                 "A+", 170.0, 60.0, "Green", null, null, null, null, null, null, null, null);
         List<User> users = Arrays.asList(user, user2);
-        when(userService.searchUsers("Doe")).thenReturn(users);
-        List<User> result = userController.searchUsers("Doe");
+        when(userService.searchUsers("Doe")).thenReturn(Flux.fromIterable(users));
+        Flux<User> resultFlux = userController.searchUsers("Doe");
+        List<User> result = resultFlux.collectList().block();
         assertEquals(2, result.size());
         assertEquals("John", result.get(0).getFirstName());
         assertEquals("Jane", result.get(1).getFirstName());
